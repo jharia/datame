@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block topbar %}
+  <p id="picture" style="background-image: url(https://graph.facebook.com/{{me.id}}/picture?type=normal)"></p>
+  <h1>Locations of statuses for <strong>{{me.name}}</strong></h1>
+{% endblock %}
+
+{% block content %}
+<section class="clearfix">
+      <h1>See the locations (where available) of your 10 most recent statuses</h1>
+      <br>
+      <h2> Template function with multiple markers </h2>
+        {% with map=googlemap_obj("another-map", 37.6, -122.3, zoom=8, markers=status_markers ) %}
+            {{map.html}}
+            {{map.js}}
+        {% endwith %}
+
+      <div class="list">	
+        <ul class="things">{% for status in statuses.data %}
+        <li>
+          <a href="#" onclick="window.open('http://www.facebook.com/{{status.id}}')">
+            {% if status.place %}
+              {{status.place.location.latitude}},{{status.place.location.longitude}}
+            {% endif %}
+          </a>
+        </li>{% endfor %}</ul>
+      </div>
+</section>
+{% endblock %}

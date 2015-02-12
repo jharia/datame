@@ -12,6 +12,8 @@ from base64 import urlsafe_b64decode, urlsafe_b64encode
 import requests
 from flask import Flask, request, redirect, render_template, url_for
 
+from flask_googlemaps import GoogleMaps, Map
+
 FB_APP_ID = os.environ.get('FACEBOOK_APP_ID')
 requests = requests.session()
 
@@ -107,13 +109,6 @@ def fb_call(call, args=None):
     r = requests.get(url, params=args)
     return json.loads(r.content)
 
-
-
-app = Flask(__name__)
-app.config.from_object(__name__)
-app.config.from_object('conf.Config')
-
-
 def get_home():
     return 'https://' + request.host + '/'
 
@@ -159,6 +154,10 @@ def get_token():
 
         return token
 
+app = Flask(__name__)
+GoogleMaps(app)
+app.config.from_object(__name__)
+app.config.from_object('conf.Config')   
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -175,7 +174,7 @@ def index():
         fb_app = fb_call(FB_APP_ID, args={'access_token': access_token})
         likes = fb_call('me/likes',
                         args={'access_token': access_token, 'limit': 4})
-        friends = fb_call('me/friends',
+        statuses = fb_call('me/statuses',
                           args={'access_token': access_token, 'limit': 4})
         photos = fb_call('me/photos',
                          args={'access_token': access_token, 'limit': 16})
@@ -195,10 +194,9 @@ def index():
                    % (redir, FB_APP_ID, get_home()))
 
         url = request.url
-
         return render_template(
             'index.html', app_id=FB_APP_ID, token=access_token, likes=likes,
-            friends=friends, photos=photos, app_friends=app_friends, app=fb_app,
+            statuses=statuses, photos=photos, app_friends=app_friends, app=fb_app,
             me=me, POST_TO_WALL=POST_TO_WALL, SEND_TO=SEND_TO, url=url,
             channel_url=channel_url, name=FB_APP_NAME)
     else:
@@ -208,14 +206,46 @@ def index():
 def get_channel():
     return render_template('channel.html')
 
-
 @app.route('/close/', methods=['GET', 'POST'])
 def close():
     return render_template('close.html')
 
+@app.route('/fb_status_locations', methods=['GET'])
+def get_fb_status_locations():
+    access_token = get_token()
+    if access_token:
+        me = fb_call('me', args={'access_token': access_token})
+        fb_app = fb_call(FB_APP_ID, args={'access_token': access_token})
+        statuses = fb_call('me/statuses',
+                          args={'access_token': access_token, 'limit': 10})
+        mymap = Map(
+            identifier="view-side",
+            lat=37.4419,
+            lng=-122.1419,
+            markers=[(37.4419, -122.1419)]
+        )
+        sndmap = Map(
+            identifier="sndmap",
+            lat=37.4419,
+            lng=-122.1419,
+            markers={'http://maps.google.com/mapfiles/ms/icons/green-dot.png':[(37.4419, -122.1419)],
+                     'http://maps.google.com/mapfiles/ms/icons/blue-dot.png':[(37.4300, -122.1400)]}
+        )
+        status_markers = []
+        app.logger.info(statuses)
+        for status in statuses['data']:
+            try:
+                status_markers.append((status['place']['location']['latitude'], status['place']['location']['longitude']))
+            except KeyError:
+                app.logger.warn('no location for status ', status['id']) 
+        app.logger.info('status markers are '+str(status_markers))
+
+    return render_template('fb_status_locations.html',
+        me=me,statuses=statuses,mymap=mymap,sndmap=sndmap,status_markers=status_markers)
+
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     if app.config.get('FB_APP_ID') and app.config.get('FB_APP_SECRET'):
-        app.run(host='0.0.0.0', port=port)
+        app.run(host='0.0.0.0', port=port, debug=True)
     else:
         print 'Cannot start application without Facebook App Id and Secret set'
